@@ -50,9 +50,9 @@ Everything was programmed with my ass, the code is kinda fucked, but it works an
 
 ## Authors
 
-- [@fauconspartiate](https://github.com/FauconSpartiate)
+- [@FauconSpartiate](https://github.com/FauconSpartiate)
 - [@xavion-lux](https://github.com/xavion-lux)
-- [@aiglespartiate](https://github.com/AigleSpartiate)
+- [@AigleSpartiate](https://github.com/AigleSpartiate)
 
 ## License
 
