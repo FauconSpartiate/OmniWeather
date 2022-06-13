@@ -6,7 +6,7 @@ void init();
 float getTemp();
 float getHumid();
 int getUV();
-unsigned long getRain();
+unsigned int getRain();
 float getWindSpeed();
 String getWindDirection();
 int getPressure();

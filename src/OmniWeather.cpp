@@ -120,8 +120,8 @@ void controlTask(void *pvParameter)
       break;
     }
 
-    // if (timeinfo.tm_sec == 0)
-    if (timeinfo.tm_min == 0 && timeinfo.tm_hour != lastHour)
+    if (timeinfo.tm_sec == 0)
+    // if (timeinfo.tm_min == 0 && timeinfo.tm_hour != lastHour)
     {
       lastHour = timeinfo.tm_hour;
 
@@ -199,6 +199,7 @@ void loop()
 {
   // Nothing to do here since controlTask has taken over.
   vTaskDelay(TICK);
+  // Serial.println(getUV());
 }
 
 void connectWiFI()

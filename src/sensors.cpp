@@ -8,9 +8,9 @@
 #define RAINPIN 32
 #define WINDSPEEDPIN 33
 #define BME280ADDRESS 0x76
-const int WINDDIRECTIONPINS[8] = {39, 36, 4, 18, 19, 16, 17, 21};
+const int WINDDIRECTIONPINS[8] = {39, 4, 5, 32, 16, 17, 21, 36};
 
-const char *compass[] = {"N  ", "NNE", "NE ", "ENE", "E  ", "ESE", "SE ", "SSE", "S  ", "SSW", "SW ", "WSW", "W  ", "WNW", "NW ", "NNW", "???"};
+const char *compass[] = {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "", "WNW", "NW", "NNW", "Error"};
 
 #define TIMERDELAY 400
 
@@ -217,7 +217,7 @@ String getWindDirection()
 	return compass[pointer];
 }
 
-unsigned long getRain()
+unsigned int getRain()
 {
 	// TODO convert to correct unit
 	return rainFall * 0.3527;
