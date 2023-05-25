@@ -1,7 +1,9 @@
 <div align='center'>
-<img src="https://user-images.githubusercontent.com/49079695/172239606-01d727ac-17bc-4d49-90ee-4558da8448fe.svg"  height="200"/>
+  <a href='https://omniweather-beta.netlify.app'>
+    <img src="https://user-images.githubusercontent.com/49079695/172239606-01d727ac-17bc-4d49-90ee-4558da8448fe.svg"  height="200"/>
+  </a>
 
-# OmniWeather
+  # OmniWeather
 
 A simple weather station, powered by an Adafruit ESP32 Feather. The measured results are uploaded every hour to a SSH server.
 
@@ -24,19 +26,21 @@ A simple weather station, powered by an Adafruit ESP32 Feather. The measured res
 
 ## Usage/Examples
 
-[Here's a page](https://foxi.ltam.lu/2CI/pirda350/public/OmniWeather/Weather_Reports/) that shows the output of this code. It should still be running, and new reports are added every hour.
+[On this page](https://foxi.ltam.lu/1CI/pirda350/public/OmniWeather/Weather_Reports/), you can take a look at the hourly reports the microcontroller sends out to the server. It "should" still be running, and new reports are added every hour.
 
-We also created [an UI in Vue.js](https://foxi.ltam.lu/2CI/collo939/public/OmniWeather/) that goes through the latest hourly report and shows it in an user friendly way. You may take a look at it, it should also be updating every hour.
+We also created an UI in Vue.js that goes through the latest hourly report and shows it in an user friendly way. You may take a look at it [on this page](https://omniweather-beta.netlify.app), it should also be updating every hour.
 
 ## Tech Stack
 
-**Microcontroller:** PlatformIO
+**Microcontroller:** PlatformIO with C++
 
 **Server:** Simple SSH storage server
 
 ## Deployment
 
-You'll first need some sensors :
+You'll first need a microcontroller to run everything. We used an Adafruit ESP32 Feather.
+
+You will then need some sensors :
 
 - BME280 sensor for temperature, humidity and pressure
 - VEML6070 sensor for UV light
