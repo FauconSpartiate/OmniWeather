@@ -1,113 +1,160 @@
 #include <ArduinoJson.h>
 #include <Arduino.h>
-#include "SPIFFS.h"
-#include "IPv6Address.h"
 #include <WiFi.h>
 #include <time.h>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <algorithm>
-#include <errno.h>
-#include <sys/stat.h>
-#include <sys/reent.h>
-#include "tcpip_adapter.h"
-#include <esp_event_legacy.h>
-#include "driver/uart.h"
-#include "esp_vfs_dev.h"
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <base64.h>
 
 #include "OmniWeather.h"
 #include "sensors.h"
-#include "ssh.h"
 
-struct _reent reent_data_esp32;
-struct _reent *_impure_ptr = &reent_data_esp32;
+#define NTP_SERVER "europe.pool.ntp.org"
 
-// Timing and timeout configuration.
+#define NET_WAIT_MS 500
 #define WIFI_TIMEOUT_S 10
-#define NET_WAIT_MS 100
+#define TICK 1000
 
-bool wifiConnected;
-bool gotIpAddr;
+const char *GITHUB_REPOSITORY_OWNER = "FauconSpartiate";
+const char *GITHUB_REPOSITORY_NAME = "OmniWeather-Reports";
 
-unsigned long getUNIX()
+bool wifiConnected = false;
+bool gotIpAddr = false;
+
+unsigned long getCurrentUnixTime()
 {
   time_t now;
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo))
   {
-    Serial.println("Failed to obtain time");
-    return (0);
+    Serial.println("% Failed to obtain time");
+    return 0;
   }
   time(&now);
   return now;
 }
 
-String getTime(bool fileName)
+String getCurrentTime(bool fileName)
 {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo))
   {
-    Serial.println(F("Failed to obtain time"));
+    Serial.println("% Failed to obtain time");
     return "Failed to obtain time";
   }
 
-  String month = String(timeinfo.tm_mon + 1);
-  String day = String(timeinfo.tm_mday);
-  String hours = String(timeinfo.tm_hour);
-  String mins = String(timeinfo.tm_min);
+  String format;
 
-  if (timeinfo.tm_mon + 1 < 10)
-    month = "0" + month;
-  if (timeinfo.tm_mday < 10)
-    day = "0" + day;
-  if (timeinfo.tm_hour < 10)
-    hours = "0" + hours;
-  if (timeinfo.tm_min < 10)
-    mins = "0" + mins;
-
-  if (!fileName)
-    return (String(timeinfo.tm_year + 1900) + "-" + month + "-" + day + " " + hours + ":" + mins);
+  if (fileName)
+  {
+    format = "%04d-%02d-%02d-%02d-%02d";
+  }
   else
-    return (String(timeinfo.tm_year + 1900) + "-" + month + "-" + day + "-" + hours + "-" + mins);
+  {
+    format = "%04d-%02d-%02d %02d:%02d";
+  }
+
+  char buffer[20];
+  snprintf(buffer, sizeof(buffer), format.c_str(),
+           timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+           timeinfo.tm_hour, timeinfo.tm_min);
+
+  return String(buffer);
 }
 
-#define delayTime 60000
-#define TICK 100
-
-void controlTask(void *pvParameter)
+void disconnectWiFi()
 {
-  _REENT_INIT_PTR((&reent_data_esp32));
+  gotIpAddr = false;
+  WiFi.disconnect();
+  WiFi.mode(WIFI_OFF);
+  wifiConnected = false;
+  Serial.println("% WiFi Disconnected");
+}
 
+void connectWiFi()
+{
+  if (WiFi.isConnected())
+  {
+    return;
+  }
+
+  WiFi.mode(WIFI_MODE_STA);
+  WiFi.setHostname("OmniWeather");
+
+  unsigned long startTime = millis();
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  while (!gotIpAddr)
+  {
+    delay(NET_WAIT_MS);
+
+    if (!wifiConnected && millis() - startTime > WIFI_TIMEOUT_S * 1000)
+    {
+      Serial.println("% Failed to connect to WiFi. Timeout exceeded.");
+      break;
+    }
+  }
+}
+
+void commitFileToGitHub(const String &fileName, const String &content)
+{
+  // GitHub API endpoint
+  String url = "/repos/" + String(GITHUB_REPOSITORY_OWNER) + "/" + String(GITHUB_REPOSITORY_NAME) + "/contents/reports/" + fileName;
+
+  // Create the JSON payload
+  DynamicJsonDocument jsonPayload(500);
+  jsonPayload["message"] = getCurrentTime(false);
+  jsonPayload["content"] = base64::encode(content);
+  jsonPayload["branch"] = "main";
+
+  // Encode the JSON payload
+  String payload;
+  serializeJson(jsonPayload, payload);
+  Serial.println("% Payload: ");
+  Serial.println(payload);
+  Serial.println();
+
+  // Create the HTTP client object
+  WiFiClientSecure wifi;
+  wifi.setInsecure();
+
+  HTTPClient http;
+
+  String authHeader = "token " + String(GITHUB_TOKEN);
+
+  // Send the PUT request to GitHub API
+  http.begin(wifi, "api.github.com", 443, url, true);
+
+  http.addHeader("Authorization", authHeader);
+  http.addHeader("Content-Type", "application/json");
+
+  int httpCode = http.PUT(payload);
+
+  // Read the response data
+  String response = http.getString();
+
+  // Print the response data
+  Serial.print("Status code: ");
+  Serial.println(httpCode);
+  Serial.println("Response: ");
+  Serial.println(response);
+  Serial.println();
+
+  // Clean up
+  http.end();
+}
+
+void controlTask()
+{
   init();
   Serial.println("% Sensors set up");
 
-  // Mount the file system.
-  boolean fsGood = SPIFFS.begin();
-  if (!fsGood)
-  {
-    printf("%% No formatted SPIFFS filesystem found to mount.\n");
-    printf("%% Formatting SPIFFS\n");
-    fsGood = SPIFFS.format();
-    if (fsGood)
-      SPIFFS.begin();
-  }
-  if (!fsGood)
-  {
-    printf("%% Aborting now.\n");
-    while (true)
-      vTaskDelay(TICK);
-  }
-  printf("%% Mounted SPIFFS used=%d total=%d\r\n", SPIFFS.usedBytes(), SPIFFS.totalBytes());
-
-  connectWiFI();
-
-  configTime(3600, 3600, NTPSERVER);
-
-  vTaskDelay(2000);
-
-  disconnectWiFI();
+  connectWiFi();
+  configTime(3600, 3600, NTP_SERVER);
+  Serial.print("% Time set up. Current time: ");
+  Serial.println(getCurrentTime(false));
+  disconnectWiFi();
 
   int lastHour = -1;
 
@@ -116,146 +163,99 @@ void controlTask(void *pvParameter)
     struct tm timeinfo;
     if (!getLocalTime(&timeinfo))
     {
-      Serial.println(F("Failed to obtain time"));
-      break;
+      Serial.println("% Failed to obtain time");
     }
 
-    if (timeinfo.tm_sec == 0)
-    // if (timeinfo.tm_min == 0 && timeinfo.tm_hour != lastHour)
+    if (timeinfo.tm_min == 0 && timeinfo.tm_hour != lastHour)
     {
       lastHour = timeinfo.tm_hour;
 
-      DynamicJsonDocument doc(2048);
+      DynamicJsonDocument jsonContent(350);
 
-      doc["time"] = getTime(false);
-      doc["UNIX"] = getUNIX();                    // UNIX
-      doc["temperature"] = getTemp();             // °
-      doc["humidity"] = getHumid();               // %
-      doc["UV"] = getUV();                        // UV Index
-      doc["rain"] = getRain();                    // mm
-      doc["wind_speed"] = getWindSpeed();         // km/h
-      doc["wind_direction"] = getWindDirection(); // °
-      doc["barometric_pressure"] = getPressure(); // hPA
-      doc["altitude"] = getAltitude();            // m
+      jsonContent["time"] = getCurrentTime(false);
+      jsonContent["UNIX"] = getCurrentUnixTime();
+      jsonContent["temperature"] = getTemperature();
+      jsonContent["humidity"] = getHumidity();
+      jsonContent["UV"] = getUV();
+      jsonContent["rain"] = getRain();
+      jsonContent["wind_speed"] = getWindSpeed();
+      jsonContent["wind_direction"] = getWindDirection();
+      jsonContent["barometric_pressure"] = getPressure();
+      jsonContent["altitude"] = getAltitude();
+
+      String content;
+      serializeJsonPretty(jsonContent, content);
+      Serial.println("% Content: ");
+      Serial.println(content);
+      Serial.println();
 
       resetValues();
 
-      connectWiFI();
+      connectWiFi();
 
-      libssh_begin();
+      String fileName = getCurrentTime(true) + ".json";
+      commitFileToGitHub(fileName, content);
 
-      String fileNameS = (String("/") + getTime(true) + String(".json"));
-      char fileName[fileNameS.length() + 1];
-      fileNameS.toCharArray(fileName, fileNameS.length() + 1);
-
-      String fileName2S = "/spiffs" + fileNameS;
-      char fileName2[fileName2S.length() + 1];
-      fileName2S.toCharArray(fileName2, fileName2S.length() + 1);
-
-      char *fileCommand[] = {"libssh_scp", fileName2, SSHSERVER, NULL};
-
-      File file = SPIFFS.open(fileName, FILE_WRITE);
-
-      Serial.println("Writing JSON:");
-      serializeJsonPretty(doc, file);
-      serializeJsonPretty(doc, Serial);
-      Serial.println("");
-
-      file.close();
-
-      int ex_argc = sizeof fileCommand / sizeof fileCommand[0] - 1;
-      printf("%% Execution in progress:");
-      short a;
-      for (a = 0; a < ex_argc; a++)
-        printf(" %s", fileCommand[a]);
-      printf("\n");
-      int ex_rc = ex_main(ex_argc, fileCommand);
-      printf("%% Execution completed with return code: %d\n", ex_rc);
-
-      // SPIFFS.format();
-      SPIFFS.remove(fileNameS);
-
-      disconnectWiFI();
+      disconnectWiFi();
     }
 
-    vTaskDelay(TICK);
+    delay(TICK);
   }
+}
+
+void configWiFi()
+{
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info)
+               {
+    switch (event)
+    {
+      case SYSTEM_EVENT_STA_START:
+        Serial.print("% WiFi Enabled - SSID: ");
+        Serial.println(WIFI_SSID);
+        break;
+      case SYSTEM_EVENT_STA_CONNECTED:
+        wifiConnected = true;
+        Serial.print("% WiFi Connected - SSID: ");
+        Serial.println(WIFI_SSID);
+        break;
+      case SYSTEM_EVENT_STA_GOT_IP:
+        gotIpAddr = true;
+        Serial.print("% WiFi - IPv4 Address: ");
+        Serial.println(IPAddress(info.got_ip.ip_info.ip.addr));
+        break;
+      case SYSTEM_EVENT_STA_LOST_IP:
+      case SYSTEM_EVENT_STA_DISCONNECTED:
+        wifiConnected = false;
+        gotIpAddr = false;
+        Serial.print("% WiFi Disconnected - SSID: ");
+        Serial.println(WIFI_SSID);
+        connectWiFi(); // Retry connection
+        break;
+      default:
+        break;
+    } });
 }
 
 void setup()
 {
-  uart_driver_install((uart_port_t)CONFIG_CONSOLE_UART_NUM, 256, 0, 0, NULL, 0);
-  esp_vfs_dev_uart_use_driver(CONFIG_CONSOLE_UART_NUM);
   Serial.begin(115200);
+  Serial.println("% OmniWeather started");
 
-  tcpip_adapter_init();
-  esp_event_loop_init(event_cb, NULL);
-
-  // Stack size needs to be larger, so continue in a new task.
-  xTaskCreatePinnedToCore(controlTask, "ctl", 40960, NULL, (tskIDLE_PRIORITY + 3), NULL, portNUM_PROCESSORS - 1);
+  configWiFi();
+  controlTask();
 }
 
 void loop()
 {
-  // Nothing to do here since controlTask has taken over.
-  vTaskDelay(TICK);
-  // Serial.println(getUV());
-}
+  delay(2000);
 
-void connectWiFI()
-{
-  disconnectWiFI();
-  WiFi.mode(WIFI_MODE_STA);
-  WiFi.setHostname("OmniWeather");
-  WiFi.begin(WIFISSID, WIFIPASSWORD);
-
-  unsigned long lastTime = millis();
-
-  while (!gotIpAddr)
-  {
-    vTaskDelay(TICK);
-
-    if (!wifiConnected && millis() - lastTime > 10000)
-      connectWiFI();
-  }
-}
-
-void disconnectWiFI()
-{
-  gotIpAddr = false;
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
-}
-
-// WiFi
-esp_err_t event_cb(void *ctx, system_event_t *event)
-{
-  switch (event->event_id)
-  {
-  case SYSTEM_EVENT_STA_START:
-    Serial.print("% WiFi Enabled - SSID: ");
-    Serial.println(WIFISSID);
-    break;
-  case SYSTEM_EVENT_STA_CONNECTED:
-    wifiConnected = true;
-    Serial.print("% WiFi Connected - SSID: ");
-    Serial.println(WIFISSID);
-    break;
-  case SYSTEM_EVENT_STA_GOT_IP:
-    gotIpAddr = true;
-    Serial.print("% WIFi - IPv4 Address: ");
-    Serial.println(IPAddress(event->event_info.got_ip.ip_info.ip.addr));
-    break;
-  case SYSTEM_EVENT_STA_LOST_IP:
-  case SYSTEM_EVENT_STA_DISCONNECTED:
-    wifiConnected = false;
-    gotIpAddr = false;
-    Serial.print("% WIFi Disconnected - SSID: ");
-    Serial.println(WIFISSID);
-    // connectWiFI();
-    break;
-  default:
-    break;
-  }
-  return ESP_OK;
+  // Sensor test
+  /*Serial.print(digitalRead(39));
+  Serial.print(digitalRead(4));
+  Serial.print(digitalRead(5));
+  Serial.print(digitalRead(65));
+  Serial.print(digitalRead(16));
+  Serial.print(digitalRead(17));
+  Serial.print(digitalRead(21));
+  Serial.println(digitalRead(36));*/
 }

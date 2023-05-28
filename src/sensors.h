@@ -3,8 +3,8 @@
 #include "Arduino.h"
 
 void init();
-float getTemp();
-float getHumid();
+float getTemperature();
+float getHumidity();
 int getUV();
 unsigned int getRain();
 float getWindSpeed();

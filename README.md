@@ -3,9 +3,9 @@
     <img src="https://user-images.githubusercontent.com/49079695/172239606-01d727ac-17bc-4d49-90ee-4558da8448fe.svg"  height="200"/>
   </a>
 
-  # OmniWeather
+# OmniWeather
 
-A simple weather station, powered by an Adafruit ESP32 Feather. The measured results are uploaded every hour to a SSH server.
+A simple weather station, powered by an Adafruit ESP32 Feather. The measured results are uploaded every hour to a GitHub repository via its API.
 
 </div>
 
@@ -21,20 +21,18 @@ A simple weather station, powered by an Adafruit ESP32 Feather. The measured res
 
 ## Features
 
-- Periodic data upload on a SSH server (default is 1h)
+- Periodic data upload on a GitHub repository (default is 1h)
 - WI-FI connection / reconnection on signal loss
 
 ## Usage/Examples
 
-[On this page](https://foxi.ltam.lu/1CI/pirda350/public/OmniWeather/Weather_Reports/), you can take a look at the hourly reports the microcontroller sends out to the server. It "should" still be running, and new reports are added every hour.
+The OmniWeather project also consists of a website that displays the data in a nice and user friendly way. The website is built with Vue.js and displays the latest report available on the server. You can check out [it's repository here](https://github.com/FauconSpartiate/OmniWeather-Website), and the deployed website on [omniweather-beta.netlify.app](https://omniweather-beta.netlify.app).
 
-We also created an UI in Vue.js that goes through the latest hourly report and shows it in an user friendly way. You may take a look at it [on this page](https://omniweather-beta.netlify.app), it should also be updating every hour.
+You can also take a look at the hourly reports the microcontroller sends out to the server [on this repo](https://github.com/FauconSpartiate/OmniWeather-Reports). It "should" still be running, and new reports are added every hour.
 
 ## Tech Stack
 
-**Microcontroller:** PlatformIO with C++
-
-**Server:** Simple SSH storage server
+PlatformIO with Arduino C++
 
 ## Deployment
 

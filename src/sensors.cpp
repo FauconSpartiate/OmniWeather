@@ -73,7 +73,7 @@ void IRAM_ATTR windTick()
 	}
 }
 
-float getTemp()
+float getTemperature()
 {
 	if (isnan(bme.readTemperature()))
 	/*sensors_event_t event;
@@ -91,7 +91,7 @@ float getTemp()
 	}
 }
 
-float getHumid()
+float getHumidity()
 {
 	if (isnan(bme.readHumidity()))
 	/*sensors_event_t event;
