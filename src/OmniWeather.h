@@ -4,6 +4,6 @@
 #include "authentication.h"
 
 void connectWiFi();
-void disconnectWiFI();
+void disconnectWiFi();
 
 #endif
